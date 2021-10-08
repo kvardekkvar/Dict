@@ -120,7 +120,12 @@ class MyApp():
         root=tree.getroot()
         for child in root:
             if child.attrib['data']:
-                self.sources.add(child.attrib['data'])
-                self.addgraphsource(child.attrib['data'])
-                print(child.tag, child.attrib['data'])
+                s=child.attrib['data']
+                self.sources.add(s)
+                self.addgraphsource(s)
+                for gc in child:
+                    if s in self.dic.keys():
+                        self.dic[s].append(gc.text)
+                    else:
+                        self.dic[s]=[gc.text]
 MyApp()
