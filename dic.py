@@ -52,16 +52,30 @@ class VerticalScrolledFrame(tk.Frame):
 
 class MyLabel(tk.Label):
     instances=[]
-    def __init__(self, parent=None, *args, **kw):
+    slaves=[]
+    def __init__(self, parent=None, source='None', frame_words=None, dic={}, *args, **kw):
         tk.Label.__init__(self, parent, *args, **kw)            
         self.__class__.instances.append(self)
         self.bind('<Button-1>', self.click)
+        self.source=source
+        self.frame_words=frame_words
+        self.dic=dic
+
         
     def click(self, event):
         self.config(bg='red')
         for other in self.__class__.instances:
             if id(self) != id(other):
                 other.config(bg='#f0f0ed')
+        
+        for sl in self.slaves:
+            sl.destroy()
+            sl.pack_forget()
+            
+        for w in self.dic[str(self.source)]:
+                news=tk.Label(self.frame_words.interior, text=w, anchor='w')
+                news.pack(fill='both')
+                self.slaves.append(news)
 
 class MyApp():
     sources=set()
@@ -82,23 +96,26 @@ class MyApp():
         #self.scroll_sources=tk.Scrollbar(self.frame_sources)
         
         
-        frame_words=tk.Frame()
-        entry_words = tk.Entry(frame_words, fg="black", bg="white", width=50)
-        button_words = tk.Button(frame_words,text="Add word")
+        self.frame_words=tk.Frame(window)
+        self.frame_words_content=VerticalScrolledFrame(self.frame_words)
+        entry_words = tk.Entry(self.frame_words, fg="black", bg="white", width=50)
+        button_words = tk.Button(self.frame_words,text="Add word")
         
         self.loaddata()
         
         #self.scroll_sources.pack(side=tk.RIGHT, fill=tk.Y)
-        self.frame_sources.pack(side=tk.LEFT, fill=tk.X)
+        self.frame_sources.pack(side=tk.LEFT)
         self.frame_sources_content.pack(fill=tk.X)
         self.entry_sources.pack(side=tk.BOTTOM)
         button_sources.pack(side=tk.BOTTOM)
 
-        entry_words.pack()
-        button_words.pack()
 
-        frame_words.pack(side=tk.RIGHT)
+
+        self.frame_words.pack(side=tk.RIGHT,fill=tk.X)
+        self.frame_words_content.pack(fill='both')
         
+        button_words.pack()
+        entry_words.pack()
         window.mainloop()
         
     def addsource(self, event):
@@ -112,9 +129,10 @@ class MyApp():
             tree.write('dic.xml')
             self.addgraphsource(s)
             self.sources.add(s)
+            self.dic[s]=[' ']
     def addgraphsource(self,s):
-        news=MyLabel(self.frame_sources_content.interior, text=s[:64])    
-        news.pack(fill=tk.X)
+        newst=MyLabel(self.frame_sources_content.interior, text=s[:64], source=s, frame_words=self.frame_words_content, dic=self.dic)    
+        newst.pack(fill='x', expand=tk.TRUE)
     def loaddata(self):
         tree=ET.parse('dic.xml')
         root=tree.getroot()
@@ -123,9 +141,13 @@ class MyApp():
                 s=child.attrib['data']
                 self.sources.add(s)
                 self.addgraphsource(s)
+                if not child:
+                    self.dic[s]=[' ']
                 for gc in child:
                     if s in self.dic.keys():
                         self.dic[s].append(gc.text)
+                            
                     else:
                         self.dic[s]=[gc.text]
+                            
 MyApp()
