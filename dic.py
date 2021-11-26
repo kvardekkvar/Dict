@@ -1,7 +1,10 @@
 import tkinter as tk
 import xml.etree.ElementTree as ET
+import win32gui, win32con
 
-globvar=None
+hide = win32gui.GetForegroundWindow()
+win32gui.ShowWindow(hide, win32con.SW_HIDE)
+
 class VerticalScrolledFrame(tk.Frame):
     """A pure Tkinter scrollable frame that actually works!
     * Use the 'interior' attribute to place widgets inside the scrollable frame
