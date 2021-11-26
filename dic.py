@@ -1,6 +1,7 @@
 import tkinter as tk
 import xml.etree.ElementTree as ET
 
+globvar=None
 class VerticalScrolledFrame(tk.Frame):
     """A pure Tkinter scrollable frame that actually works!
     * Use the 'interior' attribute to place widgets inside the scrollable frame
@@ -53,14 +54,14 @@ class VerticalScrolledFrame(tk.Frame):
 class MyLabel(tk.Label):
     instances=[]
     slaves=[]
-    def __init__(self, parent=None, source='None', frame_words=None, dic={}, *args, **kw):
+    def __init__(self, parent=None, source='None', frame_words_content=None, dic={}, myapp=None, *args, **kw):
         tk.Label.__init__(self, parent, *args, **kw)            
         self.__class__.instances.append(self)
         self.bind('<Button-1>', self.click)
         self.source=source
-        self.frame_words=frame_words
+        self.frame_words_content=frame_words_content
         self.dic=dic
-
+        self.myapp=myapp
         
     def click(self, event):
         self.config(bg='red')
@@ -70,21 +71,27 @@ class MyLabel(tk.Label):
         
         for sl in self.slaves:
             sl.destroy()
-            sl.pack_forget()
-            
+        
+        self.__class__.slaves=[]
         for w in self.dic[str(self.source)]:
-                news=tk.Label(self.frame_words.interior, text=w, anchor='w')
+                news=tk.Label(self.frame_words_content.interior, text=w, anchor='w')
                 news.pack(fill='both')
                 self.slaves.append(news)
-
+                
+        self.myapp.activesource=self.source
+        
 class MyApp():
     sources=set()
     dic={}
     sources_graphical=[]
+    
+    
     def __init__(self):
         window = tk.Tk()
         greeting = tk.Label(text="My dict")
         greeting.pack()
+
+        self.activesource=None
 
         self.frame_sources=tk.Frame(window)
         self.frame_sources_content=VerticalScrolledFrame(self.frame_sources)
@@ -92,15 +99,13 @@ class MyApp():
         
         button_sources = tk.Button(self.frame_sources,text="Add source")
         button_sources.bind('<Button-1>',self.addsource)
-
-        #self.scroll_sources=tk.Scrollbar(self.frame_sources)
-        
+ 
         
         self.frame_words=tk.Frame(window)
         self.frame_words_content=VerticalScrolledFrame(self.frame_words)
-        entry_words = tk.Entry(self.frame_words, fg="black", bg="white", width=50)
+        self.entry_words = tk.Entry(self.frame_words, fg="black", bg="white", width=50)
         button_words = tk.Button(self.frame_words,text="Add word")
-        
+        button_words.bind('<Button-1>',self.addword)
         self.loaddata()
         
         #self.scroll_sources.pack(side=tk.RIGHT, fill=tk.Y)
@@ -108,31 +113,15 @@ class MyApp():
         self.frame_sources_content.pack(fill=tk.X)
         self.entry_sources.pack(side=tk.BOTTOM)
         button_sources.pack(side=tk.BOTTOM)
-
+        
 
 
         self.frame_words.pack(side=tk.RIGHT,fill=tk.X)
         self.frame_words_content.pack(fill='both')
         
         button_words.pack()
-        entry_words.pack()
+        self.entry_words.pack()
         window.mainloop()
-        
-    def addsource(self, event):
-        s = self.entry_sources.get()
-        if s and s not in self.sources:
-            tree=ET.parse('dic.xml')
-            root=tree.getroot()
-            newnode=ET.Element('source')
-            newnode.set('data', s)
-            root.append(newnode)
-            tree.write('dic.xml')
-            self.addgraphsource(s)
-            self.sources.add(s)
-            self.dic[s]=[' ']
-    def addgraphsource(self,s):
-        newst=MyLabel(self.frame_sources_content.interior, text=s[:64], source=s, frame_words=self.frame_words_content, dic=self.dic)    
-        newst.pack(fill='x', expand=tk.TRUE)
     def loaddata(self):
         tree=ET.parse('dic.xml')
         root=tree.getroot()
@@ -149,5 +138,53 @@ class MyApp():
                             
                     else:
                         self.dic[s]=[gc.text]
+                        
+    def addwordtoxml(self, w):
+        tree=ET.parse('dic.xml')
+        root=tree.getroot()
+        for snode in root.findall('source'):
+            if snode.attrib['data'] == self.activesource:
+                wordnode=ET.Element('word')
+                wordnode.text=w
+                snode.append(wordnode)
+        tree.write('dic.xml')
+
+    def addsource(self, event):
+        s = self.entry_sources.get()
+        if s and s not in self.sources:
+            tree=ET.parse('dic.xml')
+            root=tree.getroot()
+            newnode=ET.Element('source')
+            newnode.set('data', s)
+            root.append(newnode)
+            tree.write('dic.xml')
+            self.addgraphsource(s)
+            self.sources.add(s)
+            self.dic[s]=[' ']
+            
+    def addword(self, event):
+        s = self.activesource
+        w = self.entry_words.get()
+        if s==None or w =='':
+            pass
+            #tk.messagebox.showinfo('No source or no word', 'Select a source or type in a word')
+        else:
+            if self.dic[s]==[' ']:
+                    self.dic[s]=[w]
+                    for sl in MyLabel.slaves:
+                        sl.destroy()
+            else:
+                    self.dic[s]+=[w]
+            self.addgraphword(s,w)
+            self.addwordtoxml(w)
+        
+    def addgraphsource(self,s):
+        newst=MyLabel(self.frame_sources_content.interior, text=s[:64], source=s, frame_words_content=self.frame_words_content, dic=self.dic, myapp=self)    
+        newst.pack(fill='x', expand=tk.TRUE)
+    def addgraphword(self, s, w):
+        news=tk.Label(self.frame_words_content.interior, text=w, anchor='w')
+        MyLabel.slaves.append(news)
+        news.pack(fill='both')
+
                             
 MyApp()
