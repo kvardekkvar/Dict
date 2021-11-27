@@ -100,6 +100,9 @@ class MyApp():
         button_sources = tk.Button(self.frame_sources,text="Add source")
         button_sources.bind('<Button-1>',self.addsource)
         self.entry_sources.bind('<Return>',self.addsource)
+        self.entry_sources.bind('<Button-2>', lambda x: self.entry_sources.insert(0,window.clipboard_get()) )
+        self.entry_sources.bind('<Button-3>', lambda x: self.entry_sources.insert(0,window.clipboard_get()) )
+
         
         self.frame_words=tk.Frame(window)
         self.frame_words_content=VerticalScrolledFrame(self.frame_words)
@@ -107,6 +110,8 @@ class MyApp():
         button_words = tk.Button(self.frame_words,text="Add word")
         button_words.bind('<Button-1>',self.addword)
         self.entry_words.bind('<Return>',self.addword)
+        self.entry_words.bind('<Button-2>', lambda x: self.entry_words.insert(0,window.clipboard_get()) )
+        self.entry_words.bind('<Button-3>', lambda x: self.entry_words.insert(0,window.clipboard_get()) )
         self.loaddata()
         
         #self.scroll_sources.pack(side=tk.RIGHT, fill=tk.Y)
