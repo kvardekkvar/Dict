@@ -1,9 +1,5 @@
 import tkinter as tk
 import xml.etree.ElementTree as ET
-import win32gui, win32con
-
-hide = win32gui.GetForegroundWindow()
-win32gui.ShowWindow(hide, win32con.SW_HIDE)
 
 class VerticalScrolledFrame(tk.Frame):
     """A pure Tkinter scrollable frame that actually works!
@@ -164,6 +160,7 @@ class MyApp():
             self.addgraphsource(s)
             self.sources.add(s)
             self.dic[s]=[' ']
+        self.entry_sources.delete(0, tk.END)
             
     def addword(self, event):
         s = self.activesource
@@ -180,6 +177,7 @@ class MyApp():
                     self.dic[s]+=[w]
             self.addgraphword(s,w)
             self.addwordtoxml(w)
+        self.entry_words.delete(0, tk.END)
         
     def addgraphsource(self,s):
         newst=MyLabel(self.frame_sources_content.interior, text=s[:64], source=s, frame_words_content=self.frame_words_content, dic=self.dic, myapp=self)    
