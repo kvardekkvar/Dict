@@ -87,6 +87,7 @@ class MyApp():
     
     def __init__(self):
         window = tk.Tk()
+        window.title('Wordlist')
         greeting = tk.Label(text="My dict")
         greeting.pack()
 
@@ -98,13 +99,14 @@ class MyApp():
         
         button_sources = tk.Button(self.frame_sources,text="Add source")
         button_sources.bind('<Button-1>',self.addsource)
- 
+        self.entry_sources.bind('<Return>',self.addsource)
         
         self.frame_words=tk.Frame(window)
         self.frame_words_content=VerticalScrolledFrame(self.frame_words)
         self.entry_words = tk.Entry(self.frame_words, fg="black", bg="white", width=50)
         button_words = tk.Button(self.frame_words,text="Add word")
         button_words.bind('<Button-1>',self.addword)
+        self.entry_words.bind('<Return>',self.addword)
         self.loaddata()
         
         #self.scroll_sources.pack(side=tk.RIGHT, fill=tk.Y)
