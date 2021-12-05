@@ -92,35 +92,47 @@ class LabelWord(tk.Label):
         self.bind('<Button-2>', self.rightclick)
         self.bind('<Button-3>', self.rightclick)
         self.source = source
-        self.word = w
+        self.w = w
         self.dic = dic
         self.myapp=myapp
         
     def rightclick(self, event):
-        popup = DialogWord(self)
+        popup = DialogWord(self, self.w)
         
 class DialogWord:
     exists=0
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, w=Word('','0')):
         if self.exists:
             return
         DialogWord.exists = 1
         
         self.parent = parent
+        self.w=w
         
         self.popup=tk.Toplevel(parent)
         self.popup.overrideredirect(True)
         x, y = parent.winfo_rootx(), parent.winfo_rooty()
         self.popup.geometry("+%d+%d"% (x, y + 20))
 
+        f_top = tk.Frame(self.popup)
+        f_bot = tk.Frame(self.popup)
+        button_delete=tk.Button(f_top, text='Delete')
+        button_edit=tk.Button(f_top, text='Edit')
+        button_nothing=tk.Button(f_top, text='Do nothing')
+        self.entry_edit=tk.Entry(f_bot, fg="black", bg="white")
         
-        button_delete=tk.Button(self.popup, text='Delete')
-        button_edit=tk.Button(self.popup, text='Edit')
-        button_nothing=tk.Button(self.popup, text='Nothing')
+        f_top.pack()
+        f_bot.pack()
+        self.entry_edit.pack(side='bottom', fill='x')
         button_delete.pack(side='right')
-        button_edit.pack(side='right')
         button_nothing.pack(side='right')
+        button_edit.pack(side='right')
         
+        self.popup.update_idletasks() 
+        
+        self.entry_edit.configure(width=int(f_top.winfo_reqwidth()/146*23.5)) #need to change that
+        
+
         self.popup.grab_set()                 
         self.popup.bind("<Button-1>", self.clickoutside)
         self.popup.bind("<Button-2>", self.clickoutside)
@@ -128,18 +140,39 @@ class DialogWord:
         
         button_delete.bind("<Button-1>", self.delete )
         button_nothing.bind("<Button-1>", self.close)
+        button_edit.bind("<Button-1>", self.edit)
+        
+        self.entry_edit.delete(0, tk.END)
+        self.entry_edit.insert(0, self.w.text)
         
     def clickoutside(self, event):
         if event.widget == self.popup:
             if (event.x < 0 or event.x > self.popup.winfo_width() or
                 event.y < 0 or event.y > self.popup.winfo_height()):
                 self.close()
-
+                
+    def edit(self, event=None):
         
+        newtext = self.entry_edit.get()
+        if newtext != '':
+            self.parent.myapp.editwordxml(self.w, newtext)
+            
+            for sl in LabelSource.slaves:
+                if sl.w.id == self.w.id:
+                    sl['text'] = newtext
+            
+            self.w.text=newtext
+            self.close()
+        else:
+            self.entry_edit.delete(0, tk.END)
+            self.entry_edit.insert(0, self.w.text)
+        
+    
     def delete(self, event=None):
-        self.parent.myapp.delword(self.parent.word)
+        self.parent.myapp.delword(self.parent.w)
         self.parent.destroy()
         self.close()
+        
     def close(self, event=None):
         self.popup.destroy()
         DialogWord.exists=0
@@ -179,7 +212,6 @@ class MyApp():
         self.entry_words.bind('<Button-3>', lambda x: self.entry_words.insert(0,window.clipboard_get()) )
         self.loaddata()
         
-        #self.scroll_sources.pack(side=tk.RIGHT, fill=tk.Y)
         self.frame_sources.pack(side=tk.LEFT)
         self.frame_sources_content.pack(fill=tk.X)
         self.entry_sources.pack(side=tk.BOTTOM)
@@ -222,6 +254,19 @@ class MyApp():
         ET.indent(tree, space="\t", level=0)
         tree.write('dic.xml')
 
+    def editwordxml(self, w, newtext):
+        s=self.activesource
+        tree=ET.parse('dic.xml')
+        root=tree.getroot()
+        for snode in root.findall('source'):
+            if snode.attrib['data'] == self.activesource:
+                for wnode in snode:
+                    if wnode.text == w.text and wnode.attrib['id']==w.id:
+                        wnode.text = newtext
+                        break
+        ET.indent(tree, space="\t", level=0)
+        tree.write('dic.xml')
+    
     def delwordfromxml(self,s,w):
         tree=ET.parse('dic.xml')
         root=tree.getroot()
