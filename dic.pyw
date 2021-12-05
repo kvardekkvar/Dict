@@ -1,5 +1,6 @@
 import tkinter as tk
 import xml.etree.ElementTree as ET
+from random import random
 
 class VerticalScrolledFrame(tk.Frame):
     """A pure Tkinter scrollable frame that actually works!
@@ -50,6 +51,11 @@ class VerticalScrolledFrame(tk.Frame):
         canvas.bind('<Configure>', _configure_canvas)
 
 
+class Word:
+    def __init__(self, text, idw=None):
+        self.text=text
+        self.id=idw
+
 class LabelSource(tk.Label):
     instances=[]
     slaves=[]
@@ -73,7 +79,7 @@ class LabelSource(tk.Label):
         
         self.__class__.slaves=[]
         for w in self.dic[str(self.source)]:
-                news=LabelWord(self.frame_words_content.interior, text=w, myapp=self.myapp, anchor='w')
+                news=LabelWord(parent=self.frame_words_content.interior, w=w, myapp=self.myapp, anchor='w')
                 news.pack(fill='both')
                 self.slaves.append(news)
                 
@@ -81,12 +87,12 @@ class LabelSource(tk.Label):
         
         
 class LabelWord(tk.Label):
-    def __init__(self, parent=None, source='None', frame_words_content=None, dic={}, text='', myapp=None, *args, **kw):
-        tk.Label.__init__(self, parent, text=text, *args, **kw)            
+    def __init__(self, parent=None, source='None', frame_words_content=None, dic={}, w=Word('','0'), myapp=None, *args, **kw):
+        tk.Label.__init__(self, parent, text=w.text, *args, **kw)            
         self.bind('<Button-2>', self.rightclick)
         self.bind('<Button-3>', self.rightclick)
         self.source = source
-        self.word = text
+        self.word = w
         self.dic = dic
         self.myapp=myapp
         
@@ -134,7 +140,6 @@ class DialogWord:
         self.parent.myapp.delword(self.parent.word)
         self.parent.destroy()
         self.close()
-        print('deldel')
     def close(self, event=None):
         self.popup.destroy()
         DialogWord.exists=0
@@ -197,13 +202,13 @@ class MyApp():
                 self.sources.add(s)
                 self.addgraphsource(s)
                 if not child:
-                    self.dic[s]=[' ']
+                    self.dic[s]=[Word('','0')]
                 for gc in child:
                     if s in self.dic.keys():
-                        self.dic[s].append(gc.text)
+                        self.dic[s].append(Word(gc.text,gc.attrib['id']))
                             
                     else:
-                        self.dic[s]=[gc.text]
+                        self.dic[s]=[Word(gc.text,gc.attrib['id'])]
                         
     def addwordtoxml(self, w):
         tree=ET.parse('dic.xml')
@@ -211,8 +216,10 @@ class MyApp():
         for snode in root.findall('source'):
             if snode.attrib['data'] == self.activesource:
                 wordnode=ET.Element('word')
-                wordnode.text=w
+                wordnode.text=w.text
+                wordnode.set('id', w.id)
                 snode.append(wordnode)
+        ET.indent(tree, space="\t", level=0)
         tree.write('dic.xml')
 
     def delwordfromxml(self,s,w):
@@ -221,9 +228,10 @@ class MyApp():
         for snode in root.findall('source'):
             if snode.attrib['data'] == self.activesource:
                 for wnode in snode:
-                    if wnode.text == w:
+                    if wnode.text == w.text and wnode.attrib['id']==w.id:
                         snode.remove(wnode)
-                        break #deletes first occurrence of a word
+                        break
+        ET.indent(tree, space="\t", level=0)
         tree.write('dic.xml')
                 
     def addsource(self, event):
@@ -234,20 +242,22 @@ class MyApp():
             newnode=ET.Element('source')
             newnode.set('data', s)
             root.append(newnode)
+            ET.indent(tree, space="\t", level=0)
             tree.write('dic.xml')
             self.addgraphsource(s)
             self.sources.add(s)
-            self.dic[s]=[' ']
+            self.dic[s]=[Word('','0')]
         self.entry_sources.delete(0, tk.END)
             
     def addword(self, event):
         s = self.activesource
-        w = self.entry_words.get()
-        if s==None or w =='':
+        idw=str(int(random()*10000000000))
+        w = Word(self.entry_words.get(),idw)
+        if s==None or w.text =='':
             pass
             #tk.messagebox.showinfo('No source or no word', 'Select a source or type in a word')
         else:
-            if self.dic[s]==[' ']:
+            if self.dic[s] and self.dic[s][0].text=='':
                     self.dic[s]=[w]
                     for sl in LabelSource.slaves:
                         sl.destroy()
@@ -261,7 +271,7 @@ class MyApp():
     def delword(self, w):
         s=self.activesource
         w=w
-        if s==None or w=='':
+        if s==None or w.text=='':
             pass
         else:
             self.dic[s].remove(w)
@@ -271,7 +281,7 @@ class MyApp():
         newst=LabelSource(self.frame_sources_content.interior, text=s[:64], source=s, frame_words_content=self.frame_words_content, dic=self.dic, myapp=self)    
         newst.pack(fill='x', expand=tk.TRUE)
     def addgraphword(self, s, w):
-        news=LabelWord(self.frame_words_content.interior, text=w, myapp=self, anchor='w')
+        news=LabelWord(parent=self.frame_words_content.interior, w=w, myapp=self, anchor='w')
         LabelSource.slaves.append(news)
         news.pack(fill='both')
 
