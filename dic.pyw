@@ -67,6 +67,8 @@ class LabelSource(tk.Label):
         tk.Label.__init__(self, parent, *args, **kw)            
         self.__class__.instances.append(self)
         self.bind('<Button-1>', self.click)
+        self.bind('<Button-2>', self.rightclick)
+        self.bind('<Button-3>', self.rightclick)
         self.source=source
         self.frame_words_content=frame_words_content
         self.dic=dic
@@ -88,6 +90,9 @@ class LabelSource(tk.Label):
                 self.slaves.append(news)
                 
         self.myapp.activesource=self.source
+    
+    def rightclick(self, event):
+        popup = DialogWord(self, self.source, dtype='s')
         
         
 class LabelWord(tk.Label):
@@ -101,19 +106,20 @@ class LabelWord(tk.Label):
         self.myapp=myapp
         
     def rightclick(self, event):
-        popup = DialogWord(self, self.w)
+        popup = DialogWord(self, self.w, dtype='w')
         
         
         
 class DialogWord:
     exists=0
-    def __init__(self, parent=None, w=Word('','0')):
+    def __init__(self, parent=None, o=Word('','0'), dtype='w'):
         if self.exists:
             return
         DialogWord.exists = 1
         
         self.parent = parent
-        self.w=w
+        self.o=o
+        self.dtype=dtype
         
         self.popup=tk.Toplevel(parent)
         self.popup.overrideredirect(True)
@@ -149,7 +155,7 @@ class DialogWord:
         button_edit.bind("<Button-1>", self.edit)
         
         self.entry_edit.delete(0, tk.END)
-        self.entry_edit.insert(0, self.w.text)
+        self.entry_edit.insert(0, self.o.text)
         
     def clickoutside(self, event):
         if event.widget == self.popup:
@@ -161,13 +167,24 @@ class DialogWord:
         
         newtext = self.entry_edit.get()
         if newtext != '':
-            self.parent.myapp.editwordxml(self.w, newtext)
             
-            for sl in LabelSource.slaves:
-                if sl.w.id == self.w.id:
-                    sl['text'] = newtext
+            if self.dtype=='w':
+                self.parent.myapp.editwordxml(self.o, newtext)
+                
+                for sl in LabelSource.slaves:
+                    if  sl.w.id == self.o.id:
+                        sl['text'] = newtext
+            if self.dtype=='s':
+                if newtext in map(lambda x: x.text, self.parent.myapp.sources):
+                    return
+                
+                self.parent.myapp.editsourcexml(self.o, newtext)
             
-            self.w.text=newtext
+                for sl in LabelSource.instances:
+                    if sl.source.id == self.o.id:
+                        sl['text'] = newtext
+                        
+            self.o.text=newtext
             self.close()
         else:
             self.entry_edit.delete(0, tk.END)
@@ -175,7 +192,15 @@ class DialogWord:
         
     
     def delete(self, event=None):
-        self.parent.myapp.delword(self.parent.w)
+        if self.dtype=='w':
+            self.parent.myapp.delword(self.parent.w)
+        if self.dtype=='s':
+            self.parent.myapp.delsource(self.o)
+            LabelSource.instances.remove(self.parent)
+            if self.o == self.parent.myapp.activesource:
+                for sl in LabelSource.slaves:
+                        sl.destroy()
+        
         self.parent.destroy()
         self.close()
         
@@ -272,18 +297,39 @@ class MyApp():
                         break
         ET.indent(tree, space="\t", level=0)
         tree.write('dic.xml')
+        
+    def editsourcexml(self,s,newtext):
+        tree=ET.parse('dic.xml')
+        root=tree.getroot()
+        for snode in root.findall('source'):
+            if snode.attrib['id'] == s.id:
+                snode.attrib['data'] = newtext
+        ET.indent(tree, space="\t", level=0)
+        tree.write('dic.xml')
+
     
     def delwordfromxml(self,s,w):
         tree=ET.parse('dic.xml')
         root=tree.getroot()
         for snode in root.findall('source'):
-            if snode.attrib['id'] == self.activesource.id:
+            if snode.attrib['id'] == s.id:
                 for wnode in snode:
                     if wnode.text == w.text and wnode.attrib['id']==w.id:
                         snode.remove(wnode)
                         break
         ET.indent(tree, space="\t", level=0)
         tree.write('dic.xml')
+        
+    def delsourcefromxml(self,s):
+        tree=ET.parse('dic.xml')
+        root=tree.getroot()
+        for snode in root.findall('source'):
+            if snode.attrib['id'] == s.id:
+                root.remove(snode)
+                break
+        ET.indent(tree, space="\t", level=0)
+        tree.write('dic.xml')
+        
                 
     def addsource(self, event):
         stext = self.entry_sources.get()
@@ -322,14 +368,22 @@ class MyApp():
         self.entry_words.delete(0, tk.END)
     
 
-    def delword(self, w):
-        s=self.activesource
-        w=w
-        if s.text==None or w.text=='':
+    def delword(self, w, s=None):
+        if s == None:
+            s=self.activesource
+        w = w
+        if s.text == None or w.text == '':
             pass
         else:
             self.dic[s.id].remove(w)
             self.delwordfromxml(s,w)
+            
+    def delsource(self,s):
+        for w in self.dic[s.id]:
+            self.delword(w,s)
+        del self.dic[s.id]
+        self.delsourcefromxml(s)
+        
             
     def addgraphsource(self,s):
         newst=LabelSource(self.frame_sources_content.interior, text=s.text[:64], source=s, frame_words_content=self.frame_words_content, dic=self.dic, myapp=self)    
