@@ -50,7 +50,11 @@ class VerticalScrolledFrame(tk.Frame):
                 canvas.itemconfigure(interior_id, width=canvas.winfo_width())
         canvas.bind('<Configure>', _configure_canvas)
 
-
+class Source:
+    def __init__(self, text, ids=None):
+        self.text = text
+        self.id = ids
+        
 class Word:
     def __init__(self, text, idw=None):
         self.text=text
@@ -78,7 +82,7 @@ class LabelSource(tk.Label):
             sl.destroy()
         
         self.__class__.slaves=[]
-        for w in self.dic[str(self.source)]:
+        for w in self.dic[self.source.id]:
                 news=LabelWord(parent=self.frame_words_content.interior, w=w, myapp=self.myapp, anchor='w')
                 news.pack(fill='both')
                 self.slaves.append(news)
@@ -98,6 +102,8 @@ class LabelWord(tk.Label):
         
     def rightclick(self, event):
         popup = DialogWord(self, self.w)
+        
+        
         
 class DialogWord:
     exists=0
@@ -230,23 +236,23 @@ class MyApp():
         root=tree.getroot()
         for child in root:
             if child.attrib['data']:
-                s=child.attrib['data']
+                s=Source(child.attrib['data'],child.attrib['id'])
                 self.sources.add(s)
                 self.addgraphsource(s)
                 if not child:
-                    self.dic[s]=[Word('','0')]
+                    self.dic[s.id]=[Word('','0')]
                 for gc in child:
-                    if s in self.dic.keys():
-                        self.dic[s].append(Word(gc.text,gc.attrib['id']))
+                    if s.id in self.dic.keys():
+                        self.dic[s.id].append(Word(gc.text,gc.attrib['id']))
                             
                     else:
-                        self.dic[s]=[Word(gc.text,gc.attrib['id'])]
+                        self.dic[s.id]=[Word(gc.text,gc.attrib['id'])]
                         
     def addwordtoxml(self, w):
         tree=ET.parse('dic.xml')
         root=tree.getroot()
         for snode in root.findall('source'):
-            if snode.attrib['data'] == self.activesource:
+            if snode.attrib['id'] == self.activesource.id:
                 wordnode=ET.Element('word')
                 wordnode.text=w.text
                 wordnode.set('id', w.id)
@@ -259,7 +265,7 @@ class MyApp():
         tree=ET.parse('dic.xml')
         root=tree.getroot()
         for snode in root.findall('source'):
-            if snode.attrib['data'] == self.activesource:
+            if snode.attrib['id'] == self.activesource.id:
                 for wnode in snode:
                     if wnode.text == w.text and wnode.attrib['id']==w.id:
                         wnode.text = newtext
@@ -271,7 +277,7 @@ class MyApp():
         tree=ET.parse('dic.xml')
         root=tree.getroot()
         for snode in root.findall('source'):
-            if snode.attrib['data'] == self.activesource:
+            if snode.attrib['id'] == self.activesource.id:
                 for wnode in snode:
                     if wnode.text == w.text and wnode.attrib['id']==w.id:
                         snode.remove(wnode)
@@ -280,34 +286,37 @@ class MyApp():
         tree.write('dic.xml')
                 
     def addsource(self, event):
-        s = self.entry_sources.get()
-        if s and s not in self.sources:
+        stext = self.entry_sources.get()
+        if stext and stext not in map(lambda x: x.text, self.sources):
+            ids=str(int(random()*10000000000))
             tree=ET.parse('dic.xml')
             root=tree.getroot()
             newnode=ET.Element('source')
-            newnode.set('data', s)
+            newnode.set('data', stext)
+            newnode.set('id', ids)
             root.append(newnode)
             ET.indent(tree, space="\t", level=0)
             tree.write('dic.xml')
+            s=Source(stext, ids)
             self.addgraphsource(s)
             self.sources.add(s)
-            self.dic[s]=[Word('','0')]
+            self.dic[s.id]=[Word('','0')]
         self.entry_sources.delete(0, tk.END)
             
     def addword(self, event):
         s = self.activesource
         idw=str(int(random()*10000000000))
         w = Word(self.entry_words.get(),idw)
-        if s==None or w.text =='':
+        if s.text == None or w.text == '':
             pass
             #tk.messagebox.showinfo('No source or no word', 'Select a source or type in a word')
         else:
-            if self.dic[s] and self.dic[s][0].text=='':
-                    self.dic[s]=[w]
+            if self.dic[s.id] and self.dic[s.id][0].text=='':
+                    self.dic[s.id]=[w]
                     for sl in LabelSource.slaves:
                         sl.destroy()
             else:
-                    self.dic[s]+=[w]
+                    self.dic[s.id]+=[w]
             self.addgraphword(s,w)
             self.addwordtoxml(w)
         self.entry_words.delete(0, tk.END)
@@ -316,14 +325,14 @@ class MyApp():
     def delword(self, w):
         s=self.activesource
         w=w
-        if s==None or w.text=='':
+        if s.text==None or w.text=='':
             pass
         else:
-            self.dic[s].remove(w)
+            self.dic[s.id].remove(w)
             self.delwordfromxml(s,w)
             
     def addgraphsource(self,s):
-        newst=LabelSource(self.frame_sources_content.interior, text=s[:64], source=s, frame_words_content=self.frame_words_content, dic=self.dic, myapp=self)    
+        newst=LabelSource(self.frame_sources_content.interior, text=s.text[:64], source=s, frame_words_content=self.frame_words_content, dic=self.dic, myapp=self)    
         newst.pack(fill='x', expand=tk.TRUE)
     def addgraphword(self, s, w):
         news=LabelWord(parent=self.frame_words_content.interior, w=w, myapp=self, anchor='w')
