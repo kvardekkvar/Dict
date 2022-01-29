@@ -60,14 +60,16 @@ class Source:
     def __init__(self, text, ids=None):
         self.text = text
         self.id = ids
+        self.graph = None
+        self.cnt = -1
 
 
 class Word:
 
-    def __init__(self, text, idw=None):
+    def __init__(self, text, idw=None, order=0):
         self.text = text
         self.id = idw
-
+        self.order = int(order)
 
 class XmlOperation:
 
@@ -85,13 +87,14 @@ class XmlOperation:
                 s = Source(child.attrib['data'], child.attrib['id'])
                 sources.append(s)
                 if not child:
-                    dic[s.id] = [Word('', '0')]
+                    dic[s.id] = [Word('', '0', 0)]
                 for gc in child:
+                    s.cnt+=1
                     if s.id in dic.keys():
-                        dic[s.id].append(Word(gc.text, gc.attrib['id']))
+                        dic[s.id].append(Word(gc.text, gc.attrib['id'], gc.attrib['order']))
 
                     else:
-                        dic[s.id] = [Word(gc.text, gc.attrib['id'])]
+                        dic[s.id] = [Word(gc.text, gc.attrib['id'], gc.attrib['order'])]
         return dic, sources
 
     def modify(self, mode, newtext=None):
@@ -109,10 +112,11 @@ class XmlOperation:
         else:
             for snode in root.findall('source'):
                 if snode.attrib['id'] == s.id:
-                    if mode == '+w':
+                    if mode == '+w':                        
                         wordnode = ET.Element('word')
                         wordnode.text = w.text
                         wordnode.set('id', w.id)
+                        wordnode.set('order', str(w.order))
                         snode.append(wordnode)
                     if mode == '?w':
                         for wnode in snode:
@@ -177,7 +181,7 @@ class LabelSource(tk.Label):
 
         self.__class__.slaves = []
         for w in self.dic[self.source.id]:
-            news = LabelWord(parent=self.frame_words_content.interior, w=w, myapp=self.myapp, anchor='w')
+            news = LabelWord(parent=self.frame_words_content.interior, w=w, myapp=self.myapp, anchor='w', source=self.source)
             news.pack(fill='both')
             self.slaves.append(news)
 
@@ -191,17 +195,42 @@ class LabelWord(tk.Label):
     def __init__(self, parent=None, source='None', frame_words_content=None, dic=None, w=Word('', '0'), myapp=None,
                  *args, **kw):
         tk.Label.__init__(self, parent, text=w.text, *args, **kw)
+        
+        #test
+        self.bind('<Button-1>', self.move1up) 
         self.bind('<Button-2>', self.rightclick)
         self.bind('<Button-3>', self.rightclick)
         self.source = source
         self.w = w
-        self.dic = dic
         self.myapp = myapp
+        if not dic:
+            self.dic = self.myapp.dic
+        else:
+            self.dic = dic
+        
 
     def rightclick(self, event):
         DialogWord(self, self.w, dtype='w')
-
-
+        
+    def move1up(self, event):
+        
+        index = self.w.order
+        
+        if self.w.order == 0:
+            return
+        
+        #reorder
+        for sl in self.source.graph.slaves:
+            if sl.w.order==index-1:
+                sl.w.order, self.w.order = self.w.order, sl.w.order
+            sl.destroy()
+            
+        #display
+        for i in sorted(self.dic[self.source.id], key=lambda w: w.order):
+            self.myapp.addgraphword(self.source, i)
+            
+        #rewerite to xml -- not implemented yet
+       
 class DialogWord:
     exists = 0
 
@@ -366,7 +395,8 @@ class MyApp:
     def addword(self, event):
         s = self.activesource
         idw = str(int(random() * 10000000000))
-        w = Word(self.entry_words.get(), idw)
+        s.cnt = s.cnt + 1
+        w = Word(self.entry_words.get(), idw, s.cnt)
         if s.text is None or w.text == '':
             pass
             # tk.messagebox.showinfo('No source or no word', 'Select a source or type in a word')
@@ -389,7 +419,9 @@ class MyApp:
             pass
         else:
             self.dic[s.id].remove(w)
+            s.cnt-=1
             XmlOperation(s, w).delword()
+            
 
     def delsource(self, s):
         for w in self.dic[s.id]:
@@ -400,10 +432,11 @@ class MyApp:
     def addgraphsource(self, s):
         newst = LabelSource(self.frame_sources_content.interior, text=s.text[:64], source=s,
                             frame_words_content=self.frame_words_content, dic=self.dic, myapp=self)
+        s.graph = newst
         newst.pack(fill='x', expand=tk.TRUE)
 
     def addgraphword(self, s, w):
-        news = LabelWord(parent=self.frame_words_content.interior, w=w, myapp=self, anchor='w')
+        news = LabelWord(parent=self.frame_words_content.interior, w=w, myapp=self, anchor='w', source=s)
         LabelSource.slaves.append(news)
         news.pack(fill='both')
 
