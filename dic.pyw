@@ -124,10 +124,14 @@ class XmlOperation:
                                 wnode.text = newtext
                                 break
                     if mode == '-w':
+                        wtobedeleted=None
                         for wnode in snode:
+                            oldorder = int(wnode.attrib['order'])
+                            if oldorder > w.order:
+                                wnode.attrib['order'] = str(oldorder - 1)
                             if wnode.text == w.text and wnode.attrib['id'] == w.id:
-                                snode.remove(wnode)
-                                break
+                                wtobedeleted = wnode
+                        snode.remove(wtobedeleted)
                     if mode == '?s':
                         snode.attrib['data'] = newtext
                     if mode == '-s':
@@ -154,7 +158,27 @@ class XmlOperation:
     def delsource(self):
         self.modify(mode='-s')
 
-
+    def swapwords(self, index1, index2):
+        s = self.s
+        w = self.w
+        tree = ET.parse('dic.xml')
+        root = tree.getroot()
+        for snode in root.findall('source'):
+            if snode.attrib['id'] == s.id:
+                cnt = 0
+                for wnode in snode:
+                    if wnode.attrib['order'] == str(index1):
+                        wnode.attrib['order'] = str(index2)
+                        cnt+=1
+                        continue
+                    if wnode.attrib['order'] == str(index2):
+                        wnode.attrib['order'] = str(index1)
+                        cnt+=1
+                    if cnt == 2:
+                        break
+        ET.indent(tree, space="\t", level=0)
+        tree.write('dic.xml')
+        
 class LabelSource(tk.Label):
     instances = []
     slaves = []
@@ -180,7 +204,7 @@ class LabelSource(tk.Label):
             sl.destroy()
 
         self.__class__.slaves = []
-        for w in self.dic[self.source.id]:
+        for w in sorted(self.dic[self.source.id], key=lambda w: w.order):
             news = LabelWord(parent=self.frame_words_content.interior, w=w, myapp=self.myapp, anchor='w', source=self.source)
             news.pack(fill='both')
             self.slaves.append(news)
@@ -196,8 +220,9 @@ class LabelWord(tk.Label):
                  *args, **kw):
         tk.Label.__init__(self, parent, text=w.text, *args, **kw)
         
-        #test
-        self.bind('<Button-1>', self.move1up) 
+        self.bind('<Motion>', lambda ev: self.focus_set())
+        self.bind('<Shift-Key-Up>', self.move1up)
+        self.bind('<Shift-Key-Down>', self.move1down)
         self.bind('<Button-2>', self.rightclick)
         self.bind('<Button-3>', self.rightclick)
         self.source = source
@@ -212,25 +237,35 @@ class LabelWord(tk.Label):
     def rightclick(self, event):
         DialogWord(self, self.w, dtype='w')
         
-    def move1up(self, event):
+    def move1up(self, event=None):
         
         index = self.w.order
         
         if self.w.order == 0:
             return
         
-        #reorder
         for sl in self.source.graph.slaves:
-            if sl.w.order==index-1:
+            if sl.winfo_exists() and sl.w.order == index-1:
                 sl.w.order, self.w.order = self.w.order, sl.w.order
             sl.destroy()
             
-        #display
         for i in sorted(self.dic[self.source.id], key=lambda w: w.order):
-            self.myapp.addgraphword(self.source, i)
-            
-        #rewerite to xml -- not implemented yet
-       
+            news = self.myapp.addgraphword(self.source, i)
+            if i.order == index - 1 and event != 'down':
+                news.focus_set()
+            if i.order == index and event == 'down':
+                news.focus_set()
+                
+    
+        XmlOperation(s=self.source).swapwords(index-1, index)
+        
+    def move1down(self, event=None):
+        index = self.w.order
+        for sl in self.source.graph.slaves:
+            if sl.winfo_exists() and sl.w.order == index + 1:
+                sl.move1up('down')
+                break
+                    
 class DialogWord:
     exists = 0
 
@@ -293,7 +328,7 @@ class DialogWord:
                 XmlOperation(s=self.parent.myapp.activesource, w=self.o).editword(newtext=newtext)
 
                 for sl in LabelSource.slaves:
-                    if sl.w.id == self.o.id:
+                    if sl.winfo_exists() and sl.w.id == self.o.id:
                         sl['text'] = newtext
             if self.dtype == 's':
                 if newtext in map(lambda x: x.text, self.parent.myapp.sources):
@@ -418,6 +453,10 @@ class MyApp:
         if s.text is None or w.text == '':
             pass
         else:
+            order = w.order
+            for otherword in self.dic[s.id]:
+                if otherword.order>order:
+                    otherword.order-=1
             self.dic[s.id].remove(w)
             s.cnt-=1
             XmlOperation(s, w).delword()
@@ -439,6 +478,6 @@ class MyApp:
         news = LabelWord(parent=self.frame_words_content.interior, w=w, myapp=self, anchor='w', source=s)
         LabelSource.slaves.append(news)
         news.pack(fill='both')
-
+        return news
 
 MyApp()
