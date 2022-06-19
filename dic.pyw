@@ -185,7 +185,7 @@ class XmlOperation:
         token = settings.readline().rstrip()
         settings.close()
         
-        endpoint = 'http://178.209.46.147:5001/dic/xml'
+        endpoint = 'http://178.209.46.147/Flask/dic/xml'
         file =  open(myfile,'r')
         x = requests.post(endpoint, headers={'authorization':token}, data=file.read())
         file.close()
