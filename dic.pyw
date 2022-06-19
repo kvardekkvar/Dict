@@ -1,7 +1,7 @@
 import tkinter as tk
 import xml.etree.ElementTree as ET
 from random import random
-import subprocess
+import requests
 
 class VerticalScrolledFrame(tk.Frame):
     """A pure Tkinter scrollable frame that actually works!
@@ -181,12 +181,15 @@ class XmlOperation:
         
     def syncXml(e):
         myfile = 'dic.xml'
-        destination = 'turret@durian:/var/www/html/dic/xml/dictest.xml'
         settings = open("dicsettings.txt", "r")
         token = settings.readline().rstrip()
         settings.close()
-
-        p = subprocess.Popen(["pscp", "-pw", token, myfile, destination])
+        
+        endpoint = 'http://178.209.46.147:5001/dic/xml'
+        file =  open(myfile,'r')
+        x = requests.post(endpoint, headers={'authorization':token}, data=file.read())
+        file.close()
+        return
     
 class LabelSource(tk.Label):
     instances = []
@@ -374,7 +377,7 @@ class DialogWord:
         DialogWord.exists = 0
 
 
-class MyApp:
+class MyApp(tk.Tk):
     sources = []
     dic = {}
     sources_graphical = []
