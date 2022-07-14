@@ -1,0 +1,78 @@
+body {
+  background-color: #dddddd;
+  height: 100%;
+}
+
+button {
+  white-space: nowrap
+}
+
+.sw-container {
+  height: 70%;
+}
+
+.column {
+  width: 50%;
+  color: black;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.column-width {
+  width: 50%;
+}
+
+.source {
+  color: black;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.active-source {
+  background-color: red;
+}
+
+.footer * {
+  width: 100%
+}
+
+#header {
+  text-align: center;
+}
+
+.hidden {
+  display: none;
+}
+
+#modal-root {
+  position: fixed;
+  overflow: hidden;
+  background-color: rgba(0, 0, 0, 0.4);
+  left: 0;
+  top: 0;
+  width: 0px;
+  height: 0px;
+  opacity: 0;
+  transition: opacity 0.15s ease-out, width 0s linear 0.15s, height 0s linear 0.15s;
+}
+
+#modal-root.visible {
+  width: 100%;
+  height: 100%;
+  opacity: 1;
+  transition: opacity 0.15s ease-out;
+}
+
+.modal-for-source input {
+  text-align: center;
+}
+
+.modal-for-source .center-innards {
+  justify-content: center;
+  align-items: center;
+}
+
+.center-innards {
+  display: flex;
+}

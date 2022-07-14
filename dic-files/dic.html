@@ -1,0 +1,68 @@
+<html>
+
+<head>
+  <link rel="stylesheet" href="dic.css">
+  <script type="text/javascript" src="dic.js"></script>
+
+</head>
+
+<body>
+  <button id="test" onClick="getSources()" class='hidden'> Test</button><br />
+  <div id='header'>
+    Dict 2.0
+    <br />
+    <button id="sync-xml" onClick="syncXml()">Sync XML</button><br />
+  </div>
+
+
+
+  <div class='sw-container' style='display:flex; '>
+
+    <div id='s' class='column'>
+      Error. Sources not loaded
+
+    </div>
+    <div id='w' class='column'>
+      ---<br>
+      Select a source
+    </div>
+  </div>
+  <div style='display:flex; '>
+    <div class='column-width footer'>
+
+      <input id='inp-s'><br />
+      <button id='add-s' onClick='addSource()'>Add source</button><br />
+
+    </div>
+
+    <div class='column-width footer'>
+
+      <input id='inp-w'><br />
+      <button id="add-w" onClick='addWord()'>Add word</button><br />
+
+    </div>
+  </div>
+  <div id='modal-root'>
+    <div id='edit-modal' class='hidden'>
+      <input id='modal-inp'>
+      <br />
+      <div class='center-innards'>
+        <button id='edit-btn'>Edit</button>
+        <button id='nothing-btn'>Do nothing</button>
+        <button id='delete-btn'>Delete</button>
+      </div>
+
+    </div>
+  </div>
+  <br />
+  <div id="response-container">ooo</div>
+  <div id="pywebview-status">ooo</div>
+
+  Instructions: <br />
+  &nbsp; Left click on source = show words for that source <br />
+  &nbsp; Right click on source or word = show modal for editing/deleting <br />
+
+  &nbsp; Not implemented: Shift + up/down -- move word up/down by 1
+</body>
+
+</html>

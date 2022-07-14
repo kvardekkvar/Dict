@@ -1,75 +1,48 @@
-import tkinter as tk
 import xml.etree.ElementTree as ET
+from xml.dom import minidom
 from random import random
 import requests
 
-class VerticalScrolledFrame(tk.Frame):
-    """A pure Tkinter scrollable frame that actually works!
-    * Use the 'interior' attribute to place widgets inside the scrollable frame
-    * Construct and pack/place/grid normally
-    * This frame only allows vertical scrolling
+import webview
+import traceback
+import json
+import sys
+import os
 
-    """
 
-    def __init__(self, parent, *args, **kw):
-        tk.Frame.__init__(self, parent, *args, **kw)
+if getattr(sys, 'frozen', False):
+    app_path = os.path.dirname(sys.executable)
+else:
+    app_path = os.path.dirname(os.path.abspath(__file__))
 
-        # create a canvas object and a vertical scrollbar for scrolling it
-        vscrollbar = tk.Scrollbar(self, orient=tk.VERTICAL)
-        vscrollbar.pack(
-            fill=tk.Y,
-            side=tk.RIGHT,
-            expand=tk.FALSE
-        )
-        canvas = tk.Canvas(self, bd=0, highlightthickness=0,
-                           yscrollcommand=vscrollbar.set)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.TRUE)
-        vscrollbar.config(command=canvas.yview)
-
-        # reset the view
-        canvas.xview_moveto(0)
-        canvas.yview_moveto(0)
-
-        # create a frame inside the canvas which will be scrolled with it
-        self.interior = interior = tk.Frame(canvas)
-        interior_id = canvas.create_window(0, 0, window=interior,
-                                           anchor=tk.NW)
-
-        # track changes to the canvas and frame width and sync them,
-        # also updating the scrollbar
-        def _configure_interior(event):
-            # update the scrollbars to match the size of the inner frame
-            size = (interior.winfo_reqwidth(), interior.winfo_reqheight())
-            canvas.config(scrollregion="0 0 %s %s" % size)
-            if interior.winfo_reqwidth() != canvas.winfo_width():
-                # update the canvas's width to fit the inner frame
-                canvas.config(width=interior.winfo_reqwidth())
-
-        interior.bind('<Configure>', _configure_interior)
-
-        def _configure_canvas(event):
-            if interior.winfo_reqwidth() != canvas.winfo_width():
-                # update the inner frame's width to fill the canvas
-                canvas.itemconfigure(interior_id, width=canvas.winfo_width())
-
-        canvas.bind('<Configure>', _configure_canvas)
-
+xmlfilepath = os.path.join(app_path, 'dic-files', 'dic.xml')
+htmlfilepath = os.path.join(app_path, 'dic-files', 'dic.html')
+settingsfilepath = os.path.join(app_path, 'dic-files', 'dicsettings.txt')
 
 class Source:
 
-    def __init__(self, text, ids=None):
+    def __init__(self, text, SourceId=None):
         self.text = text
-        self.id = ids
+        self.id = SourceId
         self.graph = None
         self.cnt = -1
+        
+    def toJSON(self):
+        return json.dumps(self, default=lambda o: o.__dict__, 
+            sort_keys=True, indent=4)
 
 
 class Word:
 
-    def __init__(self, text, idw=None, order=0):
+    def __init__(self, text, WordId=None, order=0, parentSource=None):
         self.text = text
-        self.id = idw
+        self.id = WordId
         self.order = int(order)
+        self.source = parentSource
+        
+    def toJSON(self):
+        return json.dumps(self, default=lambda o: o.__dict__, 
+            sort_keys=True, indent=4)
 
 class XmlOperation:
 
@@ -77,10 +50,11 @@ class XmlOperation:
         self.s = s
         self.w = w
         
+        
     def load(self):
         dic = {}
         sources = []
-        tree = ET.parse('dic.xml')
+        tree = ET.parse(xmlfilepath)
         root = tree.getroot()
         for child in root:
             if child.attrib['data']:
@@ -91,19 +65,20 @@ class XmlOperation:
                 for gc in child:
                     s.cnt+=1
                     if s.id in dic.keys():
-                        dic[s.id].append(Word(gc.text, gc.attrib['id'], gc.attrib['order']))
+                        dic[s.id].append(Word(gc.text, gc.attrib['id'], gc.attrib['order'], s))
 
                     else:
-                        dic[s.id] = [Word(gc.text, gc.attrib['id'], gc.attrib['order'])]
+                        dic[s.id] = [Word(gc.text, gc.attrib['id'], gc.attrib['order'], s)]
         return dic, sources
+
 
     def modify(self, mode, newtext=None):
         s = self.s
         w = self.w
-        tree = ET.parse('dic.xml')
+        tree = ET.parse(xmlfilepath)
         root = tree.getroot()
         if mode == '+s':
-            tree = ET.parse('dic.xml')
+            tree = ET.parse(xmlfilepath)
             root = tree.getroot()
             newnode = ET.Element('source')
             newnode.set('data', s.text)
@@ -137,8 +112,35 @@ class XmlOperation:
                     if mode == '-s':
                         root.remove(snode)
                         break
-        ET.indent(tree, space="\t", level=0)
-        tree.write('dic.xml')
+        #ET.indent(tree, space="\t", level=0)      #works only in py3.9
+        #tree.write('dic.xml') 
+        
+        try:
+            xmlstr = ET.tostring(root, 'utf-8')
+            xmlstr=ET.XML(xmlstr)
+            self.strip(xmlstr)
+            xmlstr = self.prettify(xmlstr)
+    
+            with open(xmlfilepath, "wb") as f:
+                    f.write(xmlstr.encode('utf-8'))
+        except Exception as e:
+            print('Misdemeanor: ', e)
+            print(traceback.format_exc())
+
+    def prettify(self,elem):
+         """
+             Return a pretty-printed XML string for the Element.
+         """
+         rough_string = ET.tostring(elem, 'utf-8')
+         reparsed = minidom.parseString(rough_string)
+         return reparsed.toprettyxml(indent="\t")
+
+    def strip(self,elem):
+        for elem in elem.iter():
+            if(elem.text):
+                elem.text = elem.text.strip()
+            if(elem.tail):
+                elem.tail = elem.tail.strip()
 
     def addword(self):
         self.modify(mode='+w')
@@ -161,7 +163,7 @@ class XmlOperation:
     def swapwords(self, index1, index2):
         s = self.s
         w = self.w
-        tree = ET.parse('dic.xml')
+        tree = ET.parse(xmlfilepath)
         root = tree.getroot()
         for snode in root.findall('source'):
             if snode.attrib['id'] == s.id:
@@ -176,79 +178,213 @@ class XmlOperation:
                         cnt+=1
                     if cnt == 2:
                         break
-        ET.indent(tree, space="\t", level=0)
-        tree.write('dic.xml')
-        
+       #ET.indent(tree, space="\t", level=0)
+       #tree.write('dic.xml')
+        try:
+            xmlstr = ET.tostring(root, 'utf-8')
+            xmlstr=ET.XML(xmlstr)
+            self.strip(xmlstr)
+            xmlstr = self.prettify(xmlstr)
+    
+            with open(xmlfilepath, "wb") as f:
+                    f.write(xmlstr.encode('utf-8'))
+        except Exception as e:
+            print('Misdemeanor: ', e)
+            print(traceback.format_exc())
+
     def syncXml(e):
-        myfile = 'dic.xml'
-        settings = open("dicsettings.txt", "r")
+        myfile = xmlfilepath
+        settings = open(settingsfilepath, "r")
         token = settings.readline().rstrip()
         settings.close()
         
         endpoint = 'http://178.209.46.147/api/dic/xml'
-        file =  open(myfile,'r')
-        x = requests.post(endpoint, headers={'authorization':token}, data=file.read())
+        file =  open(myfile,'r', encoding="utf-8")
+        x = requests.post(endpoint, headers={'authorization':token}, data=file.read().encode("utf-8")
+)
         file.close()
         return
+
+
+
+class Api:
+    def handle_exceptions(f):
+        def wrapper(*args, **kw):
+            try:
+                return f(*args, **kw)
+            except Exception as e:
+                print('Misdemeanor: ', e)
+                print(traceback.format_exc())
+        return wrapper
+
+    def getSourceByText(self, text):
+        SourceObjects = [s for s in self.sources if s.text == text]
+        return SourceObjects[0]
     
-class LabelSource(tk.Label):
-    instances = []
-    slaves = []
+    def getSourceById(self, ids):
+        SourceObjects = [s for s in self.sources if s.id == ids]
+        return SourceObjects[0]
+    
+    def getWordById(self, idw):
+        for s in self.sources:
+            for w in self.dic[s.id]:
+                if w.id == idw:
+                    return w
 
-    def __init__(self, parent=None, source='None', frame_words_content=None, dic=None, myapp=None, *args, **kw):
-        tk.Label.__init__(self, parent, *args, **kw)
-        self.__class__.instances.append(self)
-        self.bind('<Button-1>', self.click)
-        self.bind('<Button-2>', self.rightclick)
-        self.bind('<Button-3>', self.rightclick)
-        self.source = source
-        self.frame_words_content = frame_words_content
-        self.dic = dic
-        self.myapp = myapp
+    def __init__(self):
+        self.dic, self.sources = XmlOperation().load()
+        
+    @handle_exceptions
+    def getSources(self):    
+        response = []
+        for s in self.sources:
+            #response.append(s.text)
+            response.append(s.toJSON())
+        print('Retrieved sources. ')
+        return {'content':response, 'message': response}
 
-    def click(self, event):
-        self.config(bg='red')
-        for other in self.__class__.instances:
-            if id(self) != id(other):
-                other.config(bg='#f0f0ed')
+    
+    
+    @handle_exceptions
+    def getWords(self, sourceId):
+        print('searching source ' + sourceId)
+        source = self.getSourceById(sourceId)
+        response = []
+        message = []
+        for w in sorted(self.dic[sourceId], key=lambda w: w.order):
+            message.append(w.text)
+            response.append(w.toJSON())
+        print('Retrieved words for source = ' + str(source.text) +' : ' + str(message))
+        return {'content':response, 'message': message}
+    
+    @handle_exceptions
+    def syncXml(self):
+        XmlOperation().syncXml()
+        response='200'
+        return {
+            'message': 'Sync successful'
+        }
 
-        for sl in self.slaves:
-            sl.destroy()
 
-        self.__class__.slaves = []
-        for w in sorted(self.dic[self.source.id], key=lambda w: w.order):
-            news = LabelWord(parent=self.frame_words_content.interior, w=w, myapp=self.myapp, anchor='w', source=self.source)
-            news.pack(fill='both')
-            self.slaves.append(news)
+    @handle_exceptions
+    def addWord(self, wordtext, sourceId):
+        source=self.getSourceById(sourceId)
+        print('Request to add word ' + wordtext + ' --> ' + source.text)
+        idw = str(int(random() * 10000000000))
+        source.cnt = source.cnt + 1
+        w = Word(wordtext, idw, source.cnt, source)
+        if source.text is None or w.text == '':
+            print('No source or no word specified')
+        else:
+            if self.dic[source.id] and self.dic[source.id][0].text == '':
+                self.dic[source.id] = [w]
+            else:
+                self.dic[source.id] += [w]
+            XmlOperation(source, w).addword()
+            print("Word added")
 
-        self.myapp.activesource = self.source
+    
+    @handle_exceptions
+    def editWord(self, newtext, changedwordId, activesourceId):
+        if newtext != '':
+                s = self.getSourceById(activesourceId)
+                w = self.getWordById(changedwordId)
+                XmlOperation(s=s, w=w).editword(newtext=newtext)
+                w.text = newtext
+                #this was not updated
+                #stange that dic is not updated
+                return {'message':'Word updated'}
+        return {'message':'Empty words not written'}
+                
+    @handle_exceptions
+    def deleteWord(self, wordId, sourceId):
+        s = self.getSourceById(sourceId)
+        w = self.getWordById(wordId)
+        
+        if s.text is None or w.text == '':
+            return  {'message': 'Strange things happen'}
+        else:
+            order = w.order
+            for otherword in self.dic[s.id]:
+                if otherword.order>order:
+                    otherword.order-=1
+            self.dic[s.id].remove(w)
+            s.cnt-=1
+            XmlOperation(s, w).delword()
+            print("Word deleted: " + w.text)
+        return  {'message': 'Word deleted'}
+    
+    @handle_exceptions
+    def addSource(self, newSource):
+        print('Request to add source: ', newSource)
+        if newSource and newSource not in map(lambda x: x.text, self.sources):
+            ids = str(int(random() * 10000000000))
+            s = Source(newSource, ids)
+            XmlOperation(s=s).addsource()
+            self.sources.append(s)
+            self.dic[s.id] = [Word('', '0')]
+            print('Added source: ', newSource)
+            return
+        print("Source not added")
+        
+    @handle_exceptions        
+    def editSource(self, newtext, changedSourceId=None, changedword=None, dtype='s'):
+            if newtext != '':
+                if dtype == 'w':
+                    XmlOperation(s=self.parent.myapp.activesource, w=self.o).editword(newtext=newtext)
+                    #this was not updated
+                    
+                if dtype == 's':
+                    if newtext in map(lambda x: x.text, self.sources):
+                        return {'message': 'Source exists'}
+                    o = self.getSourceById(changedSourceId)
+                    XmlOperation(s=o).editsource(newtext=newtext)
+                    o.text = newtext
+                    return {'message': 'Source edited'}
+    
+    @handle_exceptions
+    def deleteSource(self, sourceId, dtype='s'):
+        if dtype == 'w':
+            self.parent.myapp.delword(self.parent.w)
+        if dtype == 's':
+            s = self.getSourceById(sourceId)
+            #dictempcopy = self.dic[s.id].copy()
+            #for w in dictempcopy:
+            #    self.deleteWord(w.id, s.id)         
+            del self.dic[s.id]
+            XmlOperation(s).delsource()
+            self.sources.remove(s)
+            print("Source deleted: " + s.text)
+        return {'message': 'Source deleted'}
+    
+    @handle_exceptions
+    def moveWordOneUp(self, wordId, sourceId):
+        w = self.getWordById(wordId)
+        s = self.getSourceById(sourceId)
+        index = w.order
+        
+        if w.order == 0:
+            return {'message':"Word is 1st"}
+        
+        for otherw in self.dic[s.id]:
+            if otherw.order == index-1:
+                otherw.order, w.order = w.order, otherw.order
 
-    def rightclick(self, event):
-        DialogWord(self, self.source, dtype='s')
+    
+        XmlOperation(s=s).swapwords(index-1, index)
+        return {'message':'moved 1 up'}
+    
+api = Api()
+webview.create_window('Dic 2.0', htmlfilepath, js_api=api)
+webview.start(debug=True)
+
+'''
+
+    
 
 
 class LabelWord(tk.Label):
-    def __init__(self, parent=None, source='None', frame_words_content=None, dic=None, w=Word('', '0'), myapp=None,
-                 *args, **kw):
-        tk.Label.__init__(self, parent, text=w.text, *args, **kw)
-        
-        self.bind('<Motion>', lambda ev: self.focus_set())
-        self.bind('<Shift-Key-Up>', self.move1up)
-        self.bind('<Shift-Key-Down>', self.move1down)
-        self.bind('<Button-2>', self.rightclick)
-        self.bind('<Button-3>', self.rightclick)
-        self.source = source
-        self.w = w
-        self.myapp = myapp
-        if not dic:
-            self.dic = self.myapp.dic
-        else:
-            self.dic = dic
-        
 
-    def rightclick(self, event):
-        DialogWord(self, self.w, dtype='w')
-        
     def move1up(self, event=None):
         
         index = self.w.order
@@ -278,221 +414,5 @@ class LabelWord(tk.Label):
                 sl.move1up('down')
                 break
                     
-class DialogWord:
-    exists = 0
 
-    def __init__(self, parent=None, o=None, dtype='w'):
-        if self.exists:
-            return
-        DialogWord.exists = 1
-
-        self.parent = parent
-        self.o = o
-        self.dtype = dtype
-
-        self.popup = tk.Toplevel(parent)
-        self.popup.overrideredirect(True)
-        x, y = parent.winfo_rootx(), parent.winfo_rooty()
-        self.popup.geometry("+%d+%d" % (x, y + 20))
-
-        f_top = tk.Frame(self.popup)
-        f_bot = tk.Frame(self.popup)
-        button_delete = tk.Button(f_top, text='Delete')
-        button_edit = tk.Button(f_top, text='Edit')
-        button_nothing = tk.Button(f_top, text='Do nothing')
-        self.entry_edit = tk.Entry(f_bot, fg="black", bg="white")
-
-        f_top.pack()
-        f_bot.pack()
-        self.entry_edit.pack(side='bottom', fill='x')
-        button_delete.pack(side='right')
-        button_nothing.pack(side='right')
-        button_edit.pack(side='right')
-
-        self.popup.update_idletasks()
-
-        self.entry_edit.configure(width=int(f_top.winfo_reqwidth() / 146 * 23.5))  # need to change that
-
-        self.popup.grab_set()
-        self.popup.bind("<Button-1>", self.clickoutside)
-        self.popup.bind("<Button-2>", self.clickoutside)
-        self.popup.bind("<Button-3>", self.clickoutside)
-
-        button_delete.bind("<Button-1>", self.delete)
-        button_nothing.bind("<Button-1>", self.close)
-        button_edit.bind("<Button-1>", self.edit)
-
-        self.entry_edit.delete(0, tk.END)
-        self.entry_edit.insert(0, self.o.text)
-
-    def clickoutside(self, event):
-        if event.widget == self.popup:
-            if (event.x < 0 or event.x > self.popup.winfo_width() or
-                    event.y < 0 or event.y > self.popup.winfo_height()):
-                self.close()
-
-    def edit(self, event=None):
-
-        newtext = self.entry_edit.get()
-        if newtext != '':
-
-            if self.dtype == 'w':
-                XmlOperation(s=self.parent.myapp.activesource, w=self.o).editword(newtext=newtext)
-
-                for sl in LabelSource.slaves:
-                    if sl.winfo_exists() and sl.w.id == self.o.id:
-                        sl['text'] = newtext
-            if self.dtype == 's':
-                if newtext in map(lambda x: x.text, self.parent.myapp.sources):
-                    return
-
-                XmlOperation(s=self.o).editsource(newtext=newtext)
-
-                for sl in LabelSource.instances:
-                    if sl.source.id == self.o.id:
-                        sl['text'] = newtext
-
-            self.o.text = newtext
-            self.close()
-        else:
-            self.entry_edit.delete(0, tk.END)
-            self.entry_edit.insert(0, self.w.text)
-
-    def delete(self, event=None):
-        if self.dtype == 'w':
-            self.parent.myapp.delword(self.parent.w)
-        if self.dtype == 's':
-            self.parent.myapp.delsource(self.o)
-            LabelSource.instances.remove(self.parent)
-            self.parent.myapp.sources.remove(self.o)
-            if self.o == self.parent.myapp.activesource:
-                for sl in LabelSource.slaves:
-                    sl.destroy()
-
-        self.parent.destroy()
-        self.close()
-
-    def close(self, event=None):
-        self.popup.destroy()
-        DialogWord.exists = 0
-
-
-class MyApp(tk.Tk):
-    sources = []
-    dic = {}
-    sources_graphical = []
-
-    def __init__(self):
-        window = tk.Tk()
-        window.title('Wordlist')
-        greeting = tk.Label(text="My dict")
-        greeting.pack()
-        button_sync_xml = tk.Button(None, text="Sync Xml")
-        button_sync_xml.bind('<Button-1>', XmlOperation.syncXml)
-        button_sync_xml.pack()
-
-        self.activesource = None
-
-        self.frame_sources = tk.Frame(window)
-        self.frame_sources_content = VerticalScrolledFrame(self.frame_sources)
-        self.entry_sources = tk.Entry(self.frame_sources, fg="black", bg="white", width=50)
-
-        button_sources = tk.Button(self.frame_sources, text="Add source")
-        button_sources.bind('<Button-1>', self.addsource)
-        self.entry_sources.bind('<Return>', self.addsource)
-        self.entry_sources.bind('<Button-2>', lambda x: self.entry_sources.insert(0, window.clipboard_get()))
-        self.entry_sources.bind('<Button-3>', lambda x: self.entry_sources.insert(0, window.clipboard_get()))
-
-        self.frame_words = tk.Frame(window)
-        self.frame_words_content = VerticalScrolledFrame(self.frame_words)
-        self.entry_words = tk.Entry(self.frame_words, fg="black", bg="white", width=50)
-        button_words = tk.Button(self.frame_words, text="Add word")
-        button_words.bind('<Button-1>', self.addword)
-        self.entry_words.bind('<Return>', self.addword)
-        self.entry_words.bind('<Button-2>', lambda x: self.entry_words.insert(0, window.clipboard_get()))
-        self.entry_words.bind('<Button-3>', lambda x: self.entry_words.insert(0, window.clipboard_get()))
-        self.loaddata()
-
-        self.frame_sources.pack(side=tk.LEFT)
-        self.frame_sources_content.pack(fill=tk.X)
-        self.entry_sources.pack(side=tk.BOTTOM)
-        button_sources.pack(side=tk.BOTTOM)
-
-        self.frame_words.pack(side=tk.RIGHT, fill=tk.X)
-        self.frame_words_content.pack(fill='both')
-
-        button_words.pack()
-        self.entry_words.pack()
-        window.mainloop()
-
-    def loaddata(self):
-        
-        self.dic, self.sources = XmlOperation().load()
-        for s in self.sources:
-            self.addgraphsource(s)
-
-    def addsource(self, event):
-        stext = self.entry_sources.get()
-        if stext and stext not in map(lambda x: x.text, self.sources):
-            ids = str(int(random() * 10000000000))
-            s = Source(stext, ids)
-            XmlOperation(s=s).addsource()
-            self.addgraphsource(s)
-            self.sources.append(s)
-            self.dic[s.id] = [Word('', '0')]
-        self.entry_sources.delete(0, tk.END)
-
-    def addword(self, event):
-        s = self.activesource
-        idw = str(int(random() * 10000000000))
-        s.cnt = s.cnt + 1
-        w = Word(self.entry_words.get(), idw, s.cnt)
-        if s.text is None or w.text == '':
-            pass
-            # tk.messagebox.showinfo('No source or no word', 'Select a source or type in a word')
-        else:
-            if self.dic[s.id] and self.dic[s.id][0].text == '':
-                self.dic[s.id] = [w]
-                for sl in LabelSource.slaves:
-                    sl.destroy()
-            else:
-                self.dic[s.id] += [w]
-            self.addgraphword(s, w)
-            XmlOperation(s, w).addword()
-        self.entry_words.delete(0, tk.END)
-
-    def delword(self, w, s=None):
-        if s is None:
-            s = self.activesource
-        w = w
-        if s.text is None or w.text == '':
-            pass
-        else:
-            order = w.order
-            for otherword in self.dic[s.id]:
-                if otherword.order>order:
-                    otherword.order-=1
-            self.dic[s.id].remove(w)
-            s.cnt-=1
-            XmlOperation(s, w).delword()
-            
-
-    def delsource(self, s):
-        for w in self.dic[s.id]:
-            self.delword(w, s)
-        del self.dic[s.id]
-        XmlOperation(s).delsource()
-
-    def addgraphsource(self, s):
-        newst = LabelSource(self.frame_sources_content.interior, text=s.text[:64], source=s,
-                            frame_words_content=self.frame_words_content, dic=self.dic, myapp=self)
-        s.graph = newst
-        newst.pack(fill='x', expand=tk.TRUE)
-
-    def addgraphword(self, s, w):
-        news = LabelWord(parent=self.frame_words_content.interior, w=w, myapp=self, anchor='w', source=s)
-        LabelSource.slaves.append(news)
-        news.pack(fill='both')
-        return news
-
-MyApp()
+'''
