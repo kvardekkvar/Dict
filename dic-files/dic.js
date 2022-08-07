@@ -190,7 +190,7 @@ function resetWords(response) {
 }
 
 function addWord() {
-  newWord = document.getElementById("inp-w").value;
+  newWord = document.getElementById("inp-w").value.trim();
   document.getElementById("inp-w").value = '';
   return pywebview.api.addWord(newWord, window.activeSource?.getAttribute("data-id") ?? "").then(getWords)
     .then(p => {
@@ -236,7 +236,7 @@ function resetSources(response) {
 }
 
 function addSource() {
-  newSource = document.getElementById("inp-s").value;
+  newSource = document.getElementById("inp-s").value.trim();
   document.getElementById("inp-s").value = '';
   return pywebview.api.addSource(newSource).then(getSources)
     .then(p => {
