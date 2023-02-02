@@ -13,17 +13,18 @@ import os
 if getattr(sys, 'frozen', False):
     app_path = os.path.dirname(sys.executable)
 else:
-    app_path = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.abspath(__file__)
+    app_path = os.path.dirname(file_path)
 
-xmlfilepath = os.path.join(app_path, 'dic-files', 'dic.xml')
-htmlfilepath = os.path.join(app_path, 'dic-files', 'dic.html')
-settingsfilepath = os.path.join(app_path, 'dic-files', 'dicsettings.txt')
+xml_path = os.path.join(app_path, 'dic-files', 'dic.xml')
+html_path = os.path.join(app_path, 'dic-files', 'dic.html')
+settings_path = os.path.join(app_path, 'dic-files', 'dicsettings.txt')
 
 class Source:
 
-    def __init__(self, text, SourceId=None):
+    def __init__(self, text, source_id=None):
         self.text = text
-        self.id = SourceId
+        self.id = source_id
         self.graph = None
         self.cnt = -1
         
@@ -31,7 +32,22 @@ class Source:
         return json.dumps(self, default=lambda o: o.__dict__, 
             sort_keys=True, indent=4)
 
+    def get_id(self):
+        return self.id
 
+    def get_text(self):
+        return self.text
+    
+    def set_text(self, new_text):
+        self.text = new_text
+    
+    def increment_counter(self):
+        self.cnt+=1
+    
+    def decrement_counter(self):
+        self.cnt-=1
+    
+    
 class Word:
 
     def __init__(self, text, WordId=None, order=0, parentSource=None):
@@ -43,70 +59,96 @@ class Word:
     def toJSON(self):
         return json.dumps(self, default=lambda o: o.__dict__, 
             sort_keys=True, indent=4)
-
+        
+    def get_text(self):
+        return self.text
+    
+    def set_text(self, text):
+        if text:
+            self.text = text
+        else:
+            #write error-handling logic
+            pass
+    
+    def get_id(self):
+        return self.id
+    
 class XmlOperation:
 
-    def __init__(self, s=None, w=None):
-        self.s = s
-        self.w = w
+    def __init__(self, source=None, word=None):
+        self.source = source
+        self.word = word
+
         
         
     def load(self):
         dic = {}
         sources = []
-        tree = ET.parse(xmlfilepath)
+        tree = ET.parse(xml_path)
         root = tree.getroot()
+        
         for child in root:
-            if child.attrib['data']:
-                s = Source(child.attrib['data'], child.attrib['id'])
-                sources.append(s)
+            
+            child_data = child.attrib['data']
+            child_id = child.attrib['id']
+            
+            if child_data:
+                source = Source(child_data, child_id)
+                sources.append(source)
+                
                 if not child:
-                    dic[s.id] = [Word('', '0', 0)]
-                for gc in child:
-                    s.cnt+=1
-                    if s.id in dic.keys():
-                        dic[s.id].append(Word(gc.text, gc.attrib['id'], gc.attrib['order'], s))
-
+                    dic[child_id] = [Word('', '0', 0)]
+                    
+                for grandchild in child:
+                    grandchild_text = grandchild.text
+                    grandchild_id = grandchild.attrib['id']
+                    grandchild_order = grandchild.attrib['order']
+                    source.increment_counter()
+                    
+                    word = Word(grandchild_text, grandchild_id, grandchild_order, source)
+                    if child_id in dic.keys():
+                        dic[child_id].append(word)
                     else:
-                        dic[s.id] = [Word(gc.text, gc.attrib['id'], gc.attrib['order'], s)]
+                        dic[child_id] = [word]
+                        
         return dic, sources
 
 
     def modify(self, mode, newtext=None):
-        s = self.s
-        w = self.w
-        tree = ET.parse(xmlfilepath)
+        s = self.source
+        w = self.word
+        tree = ET.parse(xml_path)
         root = tree.getroot()
         if mode == '+s':
-            tree = ET.parse(xmlfilepath)
+            tree = ET.parse(xml_path)
             root = tree.getroot()
             newnode = ET.Element('source')
-            newnode.set('data', s.text)
-            newnode.set('id', s.id)
+            newnode.set('data', s.get_text())
+            newnode.set('id', s.get_id)
             root.append(newnode)
         else:
             for snode in root.findall('source'):
                 if snode.attrib['id'] == s.id:
                     if mode == '+w':                        
                         wordnode = ET.Element('word')
-                        wordnode.text = w.text
-                        wordnode.set('id', w.id)
+                        wordnode.text = w.get_text()
+                        wordnode.set('id', w.get_id())
                         wordnode.set('order', str(w.order))
                         snode.append(wordnode)
                     if mode == '?w':
                         for wnode in snode:
-                            if wnode.text == w.text and wnode.attrib['id'] == w.id:
+                            if wnode.text == w.get_text() and wnode.attrib['id'] == w.get_id():
                                 wnode.text = newtext
                                 break
                     if mode == '-w':
-                        wtobedeleted=None
+                        word_to_delete=None
                         for wnode in snode:
                             oldorder = int(wnode.attrib['order'])
                             if oldorder > w.order:
                                 wnode.attrib['order'] = str(oldorder - 1)
-                            if wnode.text == w.text and wnode.attrib['id'] == w.id:
-                                wtobedeleted = wnode
-                        snode.remove(wtobedeleted)
+                            if wnode.text == w.get_text() and wnode.attrib['id'] == w.get_id():
+                                word_to_delete = wnode
+                        snode.remove(word_to_delete)
                     if mode == '?s':
                         snode.attrib['data'] = newtext
                     if mode == '-s':
@@ -121,7 +163,7 @@ class XmlOperation:
             self.strip(xmlstr)
             xmlstr = self.prettify(xmlstr)
     
-            with open(xmlfilepath, "wb") as f:
+            with open(xml_path, "wb") as f:
                     f.write(xmlstr.encode('utf-8'))
         except Exception as e:
             print('Misdemeanor: ', e)
@@ -163,7 +205,7 @@ class XmlOperation:
     def swapwords(self, index1, index2):
         s = self.s
         w = self.w
-        tree = ET.parse(xmlfilepath)
+        tree = ET.parse(xml_path)
         root = tree.getroot()
         for snode in root.findall('source'):
             if snode.attrib['id'] == s.id:
@@ -186,22 +228,23 @@ class XmlOperation:
             self.strip(xmlstr)
             xmlstr = self.prettify(xmlstr)
     
-            with open(xmlfilepath, "wb") as f:
+            with open(xml_path, "wb") as f:
                     f.write(xmlstr.encode('utf-8'))
         except Exception as e:
             print('Misdemeanor: ', e)
             print(traceback.format_exc())
 
     def syncXml(e):
-        myfile = xmlfilepath
-        settings = open(settingsfilepath, "r")
+        myfile = xml_path
+        settings = open(settings_path, "r")
         token = settings.readline().rstrip()
         settings.close()
         
         endpoint = 'http://178.209.46.147/api/dic/xml'
+        headers = {'authorization':token}
         file =  open(myfile,'r', encoding="utf-8")
-        x = requests.post(endpoint, headers={'authorization':token}, data=file.read().encode("utf-8")
-)
+        request_body = file.read().encode("utf-8")
+        requests.post(endpoint, headers=headers, data=request_body)
         file.close()
         return
 
@@ -221,15 +264,16 @@ class Api:
         SourceObjects = [s for s in self.sources if s.text == text]
         return SourceObjects[0]
     
-    def getSourceById(self, ids):
-        SourceObjects = [s for s in self.sources if s.id == ids]
+    def getSourceById(self, source_id):
+        SourceObjects = [s for s in self.sources if s.id == source_id]
         return SourceObjects[0]
     
-    def getWordById(self, idw):
-        for s in self.sources:
-            for w in self.dic[s.id]:
-                if w.id == idw:
-                    return w
+    def getWordById(self, word_id):
+        for source in self.sources:
+            source_id = source.get_id()
+            for word in self.dic[source_id]:
+                if word.get_id() == word_id:
+                    return word
 
     def __init__(self):
         self.dic, self.sources = XmlOperation().load()
@@ -246,12 +290,12 @@ class Api:
     
     
     @handle_exceptions
-    def getWords(self, sourceId):
-        print('searching source ' + sourceId)
-        source = self.getSourceById(sourceId)
+    def getWords(self, source_id):
+        print('searching source ' + source_id)
+        source = self.getSourceById(source_id)
         response = []
         message = []
-        for w in sorted(self.dic[sourceId], key=lambda w: w.order):
+        for w in sorted(self.dic[source_id], key=lambda w: w.order):
             message.append(w.text)
             response.append(w.toJSON())
         print('Retrieved words for source = ' + str(source.text) +' : ' + str(message))
@@ -267,115 +311,109 @@ class Api:
 
 
     @handle_exceptions
-    def addWord(self, wordtext, sourceId):
-        source=self.getSourceById(sourceId)
-        print('Request to add word ' + wordtext + ' --> ' + source.text)
-        idw = str(int(random() * 10000000000))
-        source.cnt = source.cnt + 1
-        w = Word(wordtext, idw, source.cnt, source)
-        if source.text is None or w.text == '':
+    def addWord(self, word_text, source_id):
+        source=self.getSourceById(source_id)
+        print('Request to add word ' + word_text + ' --> ' + source.get_text())
+        word_id = str(int(random() * 10000000000))
+        source.increment_counter()
+        word = Word(word_text, word_id, source.cnt, source)
+        
+        
+        if source.text is None or word.get_text() == '':
             print('No source or no word specified')
         else:
-            if self.dic[source.id] and self.dic[source.id][0].text == '':
-                self.dic[source.id] = [w]
+            if self.dic[source_id] and self.dic[source_id][0].text == '':
+                self.dic[source_id] = [word]
             else:
-                self.dic[source.id] += [w]
-            XmlOperation(source, w).addword()
+                self.dic[source_id] += [word]
+            XmlOperation(source, word).addword()
             print("Word added")
 
     
     @handle_exceptions
-    def editWord(self, newtext, changedwordId, activesourceId):
-        if newtext != '':
-                s = self.getSourceById(activesourceId)
-                w = self.getWordById(changedwordId)
-                XmlOperation(s=s, w=w).editword(newtext=newtext)
-                w.text = newtext
+    def editWord(self, new_text, changed_word_id, active_source_id):
+        if new_text != '':
+                source = self.getSourceById(active_source_id)
+                changed_word = self.getWordById(changed_word_id)
+                XmlOperation(source, changed_word).editword(newtext=new_text)
+                changed_word.set_text(new_text)
                 #this was not updated
                 #stange that dic is not updated
                 return {'message':'Word updated'}
         return {'message':'Empty words not written'}
                 
     @handle_exceptions
-    def deleteWord(self, wordId, sourceId):
-        s = self.getSourceById(sourceId)
-        w = self.getWordById(wordId)
+    def deleteWord(self, word_id, source_id):
+        source = self.getSourceById(source_id)
+        word = self.getWordById(word_id)
         
-        if s.text is None or w.text == '':
+        if source.text is None or word.text == '':
             return  {'message': 'Strange things happen'}
         else:
-            order = w.order
-            for otherword in self.dic[s.id]:
-                if otherword.order>order:
-                    otherword.order-=1
-            self.dic[s.id].remove(w)
-            s.cnt-=1
-            XmlOperation(s, w).delword()
-            print("Word deleted: " + w.text)
+            order = word.order
+            for another_word in self.dic[source.id]:
+                if another_word.order > order:
+                    another_word.order -= 1
+            
+            self.dic[source.id].remove(word)
+            source.decrement_counter()
+            XmlOperation(source, word).delword()
+            print("Word deleted: " + word.text)
         return  {'message': 'Word deleted'}
     
     @handle_exceptions
-    def addSource(self, newSource):
-        print('Request to add source: ', newSource)
-        if newSource and newSource not in map(lambda x: x.text, self.sources):
-            ids = str(int(random() * 10000000000))
-            s = Source(newSource, ids)
-            XmlOperation(s=s).addsource()
-            self.sources.append(s)
-            self.dic[s.id] = [Word('', '0')]
-            print('Added source: ', newSource)
+    def addSource(self, new_source):
+        print('Request to add source: ', new_source)
+        if new_source and new_source not in map(lambda x: x.get_text(), self.sources):
+            source_id = str(int(random() * 10000000000))
+            source = Source(new_source, source_id)
+            XmlOperation(source).addsource()
+            self.sources.append(source)
+            self.dic[source_id] = [Word('', '0')]
+            print('Added source: ', new_source)
             return
         print("Source not added")
-        
+       
+ 
     @handle_exceptions        
-    def editSource(self, newtext, changedSourceId=None, changedword=None, dtype='s'):
-            if newtext != '':
-                if dtype == 'w':
-                    XmlOperation(s=self.parent.myapp.activesource, w=self.o).editword(newtext=newtext)
-                    #this was not updated
-                    
-                if dtype == 's':
-                    if newtext in map(lambda x: x.text, self.sources):
-                        return {'message': 'Source exists'}
-                    o = self.getSourceById(changedSourceId)
-                    XmlOperation(s=o).editsource(newtext=newtext)
-                    o.text = newtext
-                    return {'message': 'Source edited'}
-    
+    def editSource(self, new_text, changed_source_id=None, changed_word=None):
+            if new_text != '':
+                if new_text in map(lambda x: x.text, self.sources):
+                    return {'message': 'Source exists'}
+                source = self.getSourceById(changed_source_id)
+                XmlOperation(source).editsource(new_text)
+                source.text = new_text
+                return {'message': 'Source edited'}
+
     @handle_exceptions
-    def deleteSource(self, sourceId, dtype='s'):
-        if dtype == 'w':
-            self.parent.myapp.delword(self.parent.w)
-        if dtype == 's':
-            s = self.getSourceById(sourceId)
-            #dictempcopy = self.dic[s.id].copy()
-            #for w in dictempcopy:
-            #    self.deleteWord(w.id, s.id)         
-            del self.dic[s.id]
-            XmlOperation(s).delsource()
-            self.sources.remove(s)
-            print("Source deleted: " + s.text)
+    def deleteSource(self, source_id):
+
+        source = self.getSourceById(source_id)       
+        del self.dic[source_id]
+        XmlOperation(source).delsource()
+        self.sources.remove(source)
+        print("Source deleted: " + source.text)
         return {'message': 'Source deleted'}
     
     @handle_exceptions
-    def moveWordOneUp(self, wordId, sourceId):
-        w = self.getWordById(wordId)
-        s = self.getSourceById(sourceId)
-        index = w.order
+    def moveWordOneUp(self, word_id, source_id):
+        word = self.getWordById(word_id)
+        source = self.getSourceById(source_id)
+        index = word.order
         
-        if w.order == 0:
+        if word.order == 0:
             return {'message':"Word is 1st"}
         
-        for otherw in self.dic[s.id]:
-            if otherw.order == index-1:
-                otherw.order, w.order = w.order, otherw.order
+        for another_word in self.dic[source.id]:
+            if another_word.order == index-1:
+                another_word.order, word.order = word.order, another_word.order
 
     
-        XmlOperation(s=s).swapwords(index-1, index)
+        XmlOperation(source).swapwords(index-1, index)
         return {'message':'moved 1 up'}
     
 api = Api()
-webview.create_window('Dic 2.0', htmlfilepath, js_api=api)
+webview.create_window('Dic 2.0', html_path, js_api=api)
 webview.start(debug=True)
 
 '''
@@ -405,7 +443,7 @@ class LabelWord(tk.Label):
                 news.focus_set()
                 
     
-        XmlOperation(s=self.source).swapwords(index-1, index)
+        XmlOperation(self.source).swapwords(index-1, index)
         
     def move1down(self, event=None):
         index = self.w.order

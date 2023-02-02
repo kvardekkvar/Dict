@@ -116,7 +116,7 @@ class EditModal {
       var newtext = this.input.value;
       var changedsource = this.elem.getAttribute("data-id");
       this.close()
-      return pywebview.api.editSource(newtext, changedsource, 'None', 's').then(showResponse).then(getSources)
+      return pywebview.api.editSource(newtext, changedsource, 'None').then(showResponse).then(getSources)
     } else if (this.type == 'word') {
       var newtext = this.input.value;
       var changedWordId = this.elem.getAttribute("data-id");
